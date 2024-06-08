@@ -154,6 +154,36 @@ impl Cursor {
         result
     }
 
+    pub fn from_cursor_path<B: Brush>(
+        layout: &Layout<B>,
+        path: CursorPath,
+        is_leading: bool,
+    ) -> Self {
+        let line = path.line(layout).unwrap();
+        let run = path.run(layout).unwrap();
+        let cluster = path.cluster(layout).unwrap();
+        let range = cluster.text_range();
+
+        let mut offset = line.metrics().offset;
+        for run_index in 0..path.run_index {
+            offset += line.get(run_index).unwrap().advance();
+        }
+        for cluster in run.visual_clusters() {
+            // todo
+        }
+        Self {
+            path,
+            baseline: line.metrics().baseline,
+            offset,
+            advance: cluster.advance(),
+            text_start: range.start,
+            text_end: range.end,
+            insert_point: if is_leading { range.start } else { range.end },
+            is_rtl: run.is_rtl(),
+            is_inside: true,
+        }
+    }
+
     /// Returns true if the cursor is on the leading edge of the target
     /// cluster.
     pub fn is_leading(&self) -> bool {
