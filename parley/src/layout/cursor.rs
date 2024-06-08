@@ -198,7 +198,7 @@ impl Cursor {
 }
 
 /// Index based path to a cluster.
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
 pub struct CursorPath {
     /// Index of the containing line.
     pub line_index: usize,
