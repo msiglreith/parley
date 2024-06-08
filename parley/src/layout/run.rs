@@ -122,6 +122,21 @@ impl<'a, B: Brush> Run<'a, B> {
         Some(logical_index)
     }
 
+    pub fn logical_to_visual(&self, logical_index: usize) -> Option<usize> {
+        let num_clusters = self.len();
+        if logical_index >= num_clusters {
+            return None;
+        }
+
+        let visual_index = if self.is_rtl() {
+            num_clusters - 1 - logical_index
+        } else {
+            logical_index
+        };
+
+        Some(visual_index)
+    }
+
     /// Returns an iterator over the clusters in visual order.
     pub fn visual_clusters(&'a self) -> impl Iterator<Item = Cluster<'a, B>> + 'a + Clone {
         let range = self.cluster_range();

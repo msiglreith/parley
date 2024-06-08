@@ -5,6 +5,10 @@
 
 use super::*;
 
+pub enum Movement {
+    Next,
+}
+
 /// Represents a position within a layout.
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Cursor {
@@ -154,12 +158,24 @@ impl Cursor {
         let cluster = path.cluster(layout).unwrap();
         let range = cluster.text_range();
 
+        // opt: linear iteration, could be computed during layout creation
         let mut offset = line.metrics().offset;
         for run_index in 0..path.run_index {
             offset += line.get(run_index).unwrap().advance();
         }
-        for cluster in run.visual_clusters() {
-            // todo
+        for cluster_index in 0..run.len() {
+            let logical_index = run.visual_to_logical(cluster_index).unwrap();
+            if is_leading {
+                if logical_index == path.cluster_index {
+                    break;
+                }
+            }
+            offset += run.get(logical_index).unwrap().advance();
+            if !is_leading {
+                if logical_index == path.cluster_index {
+                    break;
+                }
+            }
         }
         Self {
             path,
@@ -184,6 +200,62 @@ impl Cursor {
     /// cluster.
     pub fn is_trailing(&self) -> bool {
         self.text_end == self.insert_point
+    }
+
+    pub fn movement<B: Brush>(&self, layout: &Layout<B>, movement: Movement) -> Self {
+        match movement {
+            Movement::Next => {
+                if self.is_leading() {
+                    Self::from_cursor_path(layout, self.path, false)
+                } else {
+                    let path_next = {
+                        if let Some(run) = self.path.run(layout) {
+                            let visual_index =
+                                run.logical_to_visual(self.path.cluster_index).unwrap();
+                            if visual_index + 1 < run.len() {
+                                CursorPath {
+                                    cluster_index: run.visual_to_logical(visual_index + 1).unwrap(),
+                                    ..self.path
+                                }
+                            } else {
+                                let next_run = CursorPath {
+                                    line_index: self.path.line_index,
+                                    run_index: self.path.run_index + 1,
+                                    cluster_index: 0,
+                                };
+                                if let Some(run) = next_run.run(layout) {
+                                    CursorPath {
+                                        cluster_index: run.visual_to_logical(0).unwrap(),
+                                        ..next_run
+                                    }
+                                } else {
+                                    let next_line = CursorPath {
+                                        line_index: self.path.line_index + 1,
+                                        run_index: 0,
+                                        cluster_index: 0,
+                                    };
+                                    if let Some(line) = next_line.line(layout) {
+                                        CursorPath {
+                                            cluster_index: line
+                                                .get(0)
+                                                .unwrap()
+                                                .visual_to_logical(0)
+                                                .unwrap(),
+                                            ..next_line
+                                        }
+                                    } else {
+                                        self.path
+                                    }
+                                }
+                            }
+                        } else {
+                            self.path
+                        }
+                    };
+                    Self::from_cursor_path(layout, path_next, false)
+                }
+            }
+        }
     }
 }
 
