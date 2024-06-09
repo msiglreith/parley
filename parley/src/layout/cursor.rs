@@ -6,6 +6,7 @@
 use super::*;
 
 pub enum Movement {
+    Prev,
     Next,
 }
 
@@ -204,55 +205,26 @@ impl Cursor {
 
     pub fn movement<B: Brush>(&self, layout: &Layout<B>, movement: Movement) -> Self {
         match movement {
+            Movement::Prev => {
+                if self.is_trailing() {
+                    Self::from_cursor_path(layout, self.path, true)
+                } else {
+                    if let Some(prev) = self.path.prev(layout) {
+                        Self::from_cursor_path(layout, prev, true)
+                    } else {
+                        *self
+                    }
+                }
+            }
             Movement::Next => {
                 if self.is_leading() {
                     Self::from_cursor_path(layout, self.path, false)
                 } else {
-                    let path_next = {
-                        if let Some(run) = self.path.run(layout) {
-                            let visual_index =
-                                run.logical_to_visual(self.path.cluster_index).unwrap();
-                            if visual_index + 1 < run.len() {
-                                CursorPath {
-                                    cluster_index: run.visual_to_logical(visual_index + 1).unwrap(),
-                                    ..self.path
-                                }
-                            } else {
-                                let next_run = CursorPath {
-                                    line_index: self.path.line_index,
-                                    run_index: self.path.run_index + 1,
-                                    cluster_index: 0,
-                                };
-                                if let Some(run) = next_run.run(layout) {
-                                    CursorPath {
-                                        cluster_index: run.visual_to_logical(0).unwrap(),
-                                        ..next_run
-                                    }
-                                } else {
-                                    let next_line = CursorPath {
-                                        line_index: self.path.line_index + 1,
-                                        run_index: 0,
-                                        cluster_index: 0,
-                                    };
-                                    if let Some(line) = next_line.line(layout) {
-                                        CursorPath {
-                                            cluster_index: line
-                                                .get(0)
-                                                .unwrap()
-                                                .visual_to_logical(0)
-                                                .unwrap(),
-                                            ..next_line
-                                        }
-                                    } else {
-                                        self.path
-                                    }
-                                }
-                            }
-                        } else {
-                            self.path
-                        }
-                    };
-                    Self::from_cursor_path(layout, path_next, false)
+                    if let Some(next) = self.path.next(layout) {
+                        Self::from_cursor_path(layout, next, false)
+                    } else {
+                        *self
+                    }
                 }
             }
         }
@@ -284,5 +256,92 @@ impl CursorPath {
     /// Returns the cluster for this path and the specified layout.
     pub fn cluster<'a, B: Brush>(&self, layout: &'a Layout<B>) -> Option<Cluster<'a, B>> {
         self.run(layout)?.get(self.cluster_index)
+    }
+
+    fn next<'a, B: Brush>(&self, layout: &'a Layout<B>) -> Option<Self> {
+        if let Some(run) = self.run(layout) {
+            let visual_index = run.logical_to_visual(self.cluster_index).unwrap();
+            if visual_index + 1 < run.len() {
+                Some(CursorPath {
+                    cluster_index: run.visual_to_logical(visual_index + 1).unwrap(),
+                    ..*self
+                })
+            } else {
+                let next_run = CursorPath {
+                    line_index: self.line_index,
+                    run_index: self.run_index + 1,
+                    cluster_index: 0,
+                };
+                if let Some(run) = next_run.run(layout) {
+                    Some(CursorPath {
+                        cluster_index: run.visual_to_logical(0).unwrap(),
+                        ..next_run
+                    })
+                } else {
+                    let next_line = CursorPath {
+                        line_index: self.line_index + 1,
+                        run_index: 0,
+                        cluster_index: 0,
+                    };
+                    if let Some(line) = next_line.line(layout) {
+                        Some(CursorPath {
+                            cluster_index: line.get(0).unwrap().visual_to_logical(0).unwrap(),
+                            ..next_line
+                        })
+                    } else {
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    fn prev<'a, B: Brush>(&self, layout: &'a Layout<B>) -> Option<Self> {
+        if let Some(run) = self.run(layout) {
+            let visual_index = run.logical_to_visual(self.cluster_index).unwrap();
+            if visual_index > 0 {
+                Some(CursorPath {
+                    cluster_index: run.visual_to_logical(visual_index - 1).unwrap(),
+                    ..*self
+                })
+            } else if self.run_index > 0 {
+                let mut prev_run = CursorPath {
+                    line_index: self.line_index,
+                    run_index: self.run_index - 1,
+                    cluster_index: 0,
+                };
+                if let Some(run) = prev_run.run(layout) {
+                    prev_run.cluster_index = run
+                        .visual_to_logical(run.len().saturating_sub(1))
+                        .unwrap_or(0);
+                    Some(prev_run)
+                } else {
+                    None
+                }
+            } else if self.line_index > 0 {
+                let mut prev_line = CursorPath {
+                    line_index: self.line_index - 1,
+                    run_index: 0,
+                    cluster_index: 0,
+                };
+                if let Some(line) = prev_line.line(layout) {
+                    prev_line.run_index = line.len().saturating_sub(1);
+                    if let Some(run) = line.get(prev_line.run_index) {
+                        prev_line.cluster_index = run
+                            .visual_to_logical(run.len().saturating_sub(1))
+                            .unwrap_or(0);
+                    }
+                    Some(prev_line)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }
