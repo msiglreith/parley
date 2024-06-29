@@ -151,7 +151,7 @@ impl BidiResolver {
             if is_removed_by_x9(t) {
                 continue;
             } else if t == WS || is_isolate_initiator(t) || t == PDI {
-                //self.levels[i] = self.base_level;
+                self.levels[i] = self.base_level;
             } else {
                 break;
             }
